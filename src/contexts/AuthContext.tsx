@@ -49,20 +49,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const login = async (email: string, password: string): Promise<boolean> => {
     setIsLoading(true);
-    
+
     // Simular delay de autenticación
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    
+    await new Promise(resolve => setTimeout(resolve, 30));
+
     // Buscar usuario en datos de prueba
     const foundUser = mockUsers.find(u => u.email === email);
-    
+
     if (foundUser && password === '123456') { // Contraseña de prueba
       setUser(foundUser);
       localStorage.setItem('pan-sinai-user', JSON.stringify(foundUser));
       setIsLoading(false);
       return true;
     }
-    
+
     setIsLoading(false);
     return false;
   };
@@ -85,4 +85,4 @@ export function useAuth() {
     throw new Error('useAuth must be used within an AuthProvider');
   }
   return context;
-} 
+}

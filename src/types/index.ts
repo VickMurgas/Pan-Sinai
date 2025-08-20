@@ -51,7 +51,7 @@ export interface Sale {
   subtotal: number;
   descuento: number;
   total: number;
-  metodoPago: 'efectivo' | 'tarjeta' | 'transferencia';
+  metodoPago: 'efectivo' | 'tarjeta' | 'transferencia' | 'credito';
   fecha: Date;
   sellerId: string;
   sellerName: string;
@@ -61,6 +61,10 @@ export interface Sale {
     lng: number;
   };
   observaciones?: string;
+  // Devoluciones integradas en la venta
+  tieneDevoluciones?: boolean;
+  returnItems?: ReturnCartItem[];
+  ajusteDevoluciones?: number;
 }
 
 export interface SaleProduct {
@@ -104,6 +108,22 @@ export interface ProductoDevuelto {
   productoIntercambioName?: string;
 }
 
+// Nuevo: Ítem de devolución/intercambio integrado al carrito/venta
+export interface ReturnCartItem {
+  originalProductId: string;
+  originalProductCode: string;
+  originalProductName: string;
+  quantity: number;
+  originalPrice: number;
+  // Cuando es intercambio
+  replacementProductId?: string;
+  replacementProductCode?: string;
+  replacementProductName?: string;
+  replacementPrice?: number;
+  reason: 'vencido' | 'defectuoso' | 'cliente_no_gusto' | 'otro';
+  note?: string; // Marca si se cambió por producto diferente, observaciones
+}
+
 // Nuevo: Carrito de compras para venta rápida
 export interface CartItem {
   product: Product;
@@ -118,8 +138,12 @@ export interface CartState {
   subtotal: number;
   descuento: number;
   total: number;
-  metodoPago: 'efectivo' | 'tarjeta' | 'transferencia';
+  metodoPago: 'efectivo' | 'tarjeta' | 'transferencia' | 'credito';
   cliente?: Customer;
+  // Devoluciones/intercambios integrados a la venta
+  hasReturns?: boolean;
+  returnItems?: ReturnCartItem[];
+  ajusteDevoluciones?: number; // efecto neto de devoluciones/intercambios en el total
 }
 
 // Nuevo: Sugerencia de producto alternativo
@@ -142,10 +166,22 @@ export interface StockAlerta {
 
 // Nuevo: Métodos de pago
 export interface MetodoPago {
-  tipo: 'efectivo' | 'tarjeta' | 'transferencia';
+  tipo: 'efectivo' | 'tarjeta' | 'transferencia' | 'credito';
   nombre: string;
   icono: string;
   activo: boolean;
+}
+
+// Nuevo: Pago pendiente por crédito
+export interface PendingPayment {
+  id: string; // id del pago pendiente
+  saleId: string; // referencia a la venta creada
+  customerId?: string;
+  customerName?: string;
+  amount: number;
+  createdAt: Date;
+  expiresAt: Date; // creado + 24h
+  status: 'pendiente' | 'pagado' | 'vencido';
 }
 
 // Nuevo: Configuración de ventas
@@ -197,4 +233,4 @@ export interface VendedorStats {
   customersVisited: number;
   routeStatus: 'available' | 'en-ruta' | 'finalizando';
   pendingCustomers: number;
-} 
+}

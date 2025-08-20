@@ -1,17 +1,18 @@
 'use client';
 
 import React, { useState } from 'react';
-import { QrCode, Copy, Download, CreditCard, Banknote, Smartphone } from 'lucide-react';
+import { QrCode, Copy, Download, CreditCard, Banknote, Smartphone, Clock } from 'lucide-react';
 
 interface PaymentQRProps {
   total: number;
   saleId: string;
   customerName: string;
   onPaymentComplete: () => void;
+  onMethodChange?: (method: 'cash' | 'qr' | 'credit') => void;
 }
 
-export default function PaymentQR({ total, saleId, customerName, onPaymentComplete }: PaymentQRProps) {
-  const [selectedMethod, setSelectedMethod] = useState<'cash' | 'qr'>('cash');
+export default function PaymentQR({ total, saleId, customerName, onPaymentComplete, onMethodChange }: PaymentQRProps) {
+  const [selectedMethod, setSelectedMethod] = useState<'cash' | 'qr' | 'credit'>('cash');
   const [paymentLink, setPaymentLink] = useState('');
 
   // Generar enlace de pago (simulado)
@@ -47,6 +48,37 @@ export default function PaymentQR({ total, saleId, customerName, onPaymentComple
     }, 1000);
   };
 
+  const handleSelectMethod = (method: 'cash' | 'qr' | 'credit') => {
+    setSelectedMethod(method);
+    onMethodChange && onMethodChange(method);
+  };
+
+  const handleCreditPayment = () => {
+    try {
+      const now = new Date();
+      const expires = new Date(now.getTime() + 23 * 60 * 60 * 1000);
+      const entry = {
+        id: `P${Date.now()}`,
+        saleId,
+        customerName,
+        amount: total,
+        createdAt: now.toISOString(),
+        expiresAt: expires.toISOString(),
+        status: 'pendiente'
+      };
+      const key = 'pan-sinai-pending-payments';
+      const raw = typeof window !== 'undefined' ? window.localStorage.getItem(key) : null;
+      const list = raw ? JSON.parse(raw) : [];
+      list.push(entry);
+      if (typeof window !== 'undefined') {
+        window.localStorage.setItem(key, JSON.stringify(list));
+      }
+    } catch (e) {
+      console.error('Error guardando pago pendiente:', e);
+    }
+    onPaymentComplete();
+  };
+
   return (
     <div className="bg-white rounded-lg shadow-sm p-6">
       <h2 className="text-xl font-bold text-pan-sinai-dark-brown mb-6">
@@ -56,7 +88,7 @@ export default function PaymentQR({ total, saleId, customerName, onPaymentComple
       {/* Selector de método de pago */}
       <div className="flex space-x-4 mb-6">
         <button
-          onClick={() => setSelectedMethod('cash')}
+          onClick={() => handleSelectMethod('cash')}
           className={`flex items-center space-x-2 px-4 py-3 rounded-lg transition-colors ${
             selectedMethod === 'cash'
               ? 'bg-pan-sinai-gold text-pan-sinai-dark-brown'
@@ -66,9 +98,9 @@ export default function PaymentQR({ total, saleId, customerName, onPaymentComple
           <Banknote className="w-5 h-5" />
           <span>Efectivo</span>
         </button>
-        
+
         <button
-          onClick={() => setSelectedMethod('qr')}
+          onClick={() => handleSelectMethod('qr')}
           className={`flex items-center space-x-2 px-4 py-3 rounded-lg transition-colors ${
             selectedMethod === 'qr'
               ? 'bg-pan-sinai-gold text-pan-sinai-dark-brown'
@@ -77,6 +109,18 @@ export default function PaymentQR({ total, saleId, customerName, onPaymentComple
         >
           <QrCode className="w-5 h-5" />
           <span>Pago Digital</span>
+        </button>
+
+        <button
+          onClick={() => handleSelectMethod('credit')}
+          className={`flex items-center space-x-2 px-4 py-3 rounded-lg transition-colors ${
+            selectedMethod === 'credit'
+              ? 'bg-pan-sinai-gold text-pan-sinai-dark-brown'
+              : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+          }`}
+        >
+          <Clock className="w-5 h-5" />
+          <span>Crédito</span>
         </button>
       </div>
 
@@ -92,7 +136,7 @@ export default function PaymentQR({ total, saleId, customerName, onPaymentComple
               Total a cobrar: <span className="font-bold">${total.toFixed(2)}</span>
             </p>
           </div>
-          
+
           <button
             onClick={handleCashPayment}
             className="w-full bg-green-600 text-white py-3 px-6 rounded-lg hover:bg-green-700 transition-colors font-semibold"
@@ -167,7 +211,7 @@ export default function PaymentQR({ total, saleId, customerName, onPaymentComple
                   <CreditCard className="w-4 h-4" />
                   <span>Abrir Pago</span>
                 </button>
-                
+
                 <button
                   onClick={handleCashPayment}
                   className="flex-1 bg-green-600 text-white py-2 px-4 rounded-lg hover:bg-green-700 transition-colors text-sm"
@@ -177,6 +221,31 @@ export default function PaymentQR({ total, saleId, customerName, onPaymentComple
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {/* Pago a Crédito */}
+      {selectedMethod === 'credit' && (
+        <div className="space-y-4">
+          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+            <div className="flex items-center space-x-2 mb-2">
+              <Clock className="w-6 h-6 text-yellow-600" />
+              <h3 className="font-semibold text-yellow-800">Venta a Crédito (24h)</h3>
+            </div>
+            <p className="text-yellow-800 text-sm">
+              El cliente cuenta con hasta 24 horas para realizar el pago. El registro se agregará a Pagos Pendientes con un temporizador de 23 horas.
+            </p>
+            <p className="text-yellow-900 text-sm mt-2">
+              Total a cobrar: <span className="font-bold">${total.toFixed(2)}</span>
+            </p>
+          </div>
+
+          <button
+            onClick={handleCreditPayment}
+            className="w-full bg-yellow-600 text-white py-3 px-6 rounded-lg hover:bg-yellow-700 transition-colors font-semibold"
+          >
+            Confirmar Venta a Crédito
+          </button>
         </div>
       )}
 
@@ -194,4 +263,4 @@ export default function PaymentQR({ total, saleId, customerName, onPaymentComple
       </div>
     </div>
   );
-} 
+}

@@ -71,21 +71,21 @@ interface ReconciliationContextType {
   closeRoute: (sellerId: string, sellerName: string, notes?: string) => Promise<RouteClosure>;
   getRouteClosure: (sellerId: string, date: Date) => RouteClosure | null;
   getRouteClosures: (sellerId?: string, period?: string) => RouteClosure[];
-  
+
   // Depósito bancario
-  registerDeposit: (sellerId: string, sellerName: string, amount: number, bankAccount: string, reference: string, justification?: string) => Promise<BankDeposit>;
+  registerDeposit: (sellerId: string, sellerName: string, amount: number, bankAccount: string, reference: string, justification?: string, receipt?: string) => Promise<BankDeposit>;
   getDeposits: (sellerId?: string, period?: string) => BankDeposit[];
   updateDepositStatus: (depositId: string, status: string, managerId?: string, managerName?: string) => void;
-  
+
   // Conciliación
   createReconciliation: (sellerId: string, date: Date) => Promise<Reconciliation>;
   getReconciliations: (sellerId?: string, period?: string) => Reconciliation[];
   approveReconciliation: (reconciliationId: string, managerId: string, managerName: string, notes?: string) => void;
-  
+
   // Auditoría
   addAuditEntry: (action: string, details: string, oldValue?: any, newValue?: any) => void;
   getAuditTrail: (entityId: string, entityType: string) => AuditEntry[];
-  
+
   // Preparación siguiente día
   generateReorderSuggestion: (sellerId: string, date: Date) => Product[];
   getNextDayPreparation: (sellerId: string) => any;
@@ -97,7 +97,7 @@ export function ReconciliationProvider({ children }: { children: React.ReactNode
   const { user } = useAuth();
   const { getSalesBySeller, getSalesHistory } = useSales();
   const { products, updateStock } = useProducts();
-  
+
   const [routeClosures, setRouteClosures] = useState<RouteClosure[]>([]);
   const [bankDeposits, setBankDeposits] = useState<BankDeposit[]>([]);
   const [reconciliations, setReconciliations] = useState<Reconciliation[]>([]);
@@ -127,18 +127,18 @@ export function ReconciliationProvider({ children }: { children: React.ReactNode
   const closeRoute = async (sellerId: string, sellerName: string, notes?: string): Promise<RouteClosure> => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    
+
     // Obtener ventas del día
-    const dailySales = getSalesBySeller(sellerId).filter(sale => {
-      const saleDate = new Date(sale.date);
+    const dailySales: Sale[] = getSalesBySeller(sellerId).filter((sale: Sale) => {
+      const saleDate = new Date(sale.fecha);
       return saleDate >= today;
     });
 
     // Calcular métricas
-    const totalSales = dailySales.length;
-    const totalRevenue = dailySales.reduce((sum, sale) => sum + sale.total, 0);
-    const totalProducts = dailySales.reduce((sum, sale) => 
-      sum + sale.products.reduce((pSum, product) => pSum + product.quantity, 0), 0
+    const totalSales: number = dailySales.length;
+    const totalRevenue: number = dailySales.reduce((sum: number, sale: Sale) => sum + sale.total, 0);
+    const totalProducts: number = dailySales.reduce((sum: number, sale: Sale) =>
+      sum + sale.products.reduce((pSum: number, product: any) => pSum + product.quantity, 0), 0
     );
 
     // Identificar productos no vendidos (simulado)
@@ -182,19 +182,19 @@ export function ReconciliationProvider({ children }: { children: React.ReactNode
   const getRouteClosure = (sellerId: string, date: Date): RouteClosure | null => {
     const targetDate = new Date(date);
     targetDate.setHours(0, 0, 0, 0);
-    
-    return routeClosures.find(closure => 
-      closure.sellerId === sellerId && 
+
+    return routeClosures.find(closure =>
+      closure.sellerId === sellerId &&
       new Date(closure.date).getTime() === targetDate.getTime()
     ) || null;
   };
 
   const getRouteClosures = (sellerId?: string, period: string = 'week'): RouteClosure[] => {
     let filtered = sellerId ? routeClosures.filter(rc => rc.sellerId === sellerId) : routeClosures;
-    
+
     const now = new Date();
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    
+
     switch (period) {
       case 'today':
         return filtered.filter(rc => new Date(rc.date).getTime() === today.getTime());
@@ -211,12 +211,13 @@ export function ReconciliationProvider({ children }: { children: React.ReactNode
 
   // Depósito bancario
   const registerDeposit = async (
-    sellerId: string, 
-    sellerName: string, 
-    amount: number, 
-    bankAccount: string, 
-    reference: string, 
-    justification?: string
+    sellerId: string,
+    sellerName: string,
+    amount: number,
+    bankAccount: string,
+    reference: string,
+    justification?: string,
+    receipt?: string
   ): Promise<BankDeposit> => {
     // Obtener el cierre de ruta del día
     const routeClosure = getRouteClosure(sellerId, new Date());
@@ -234,7 +235,8 @@ export function ReconciliationProvider({ children }: { children: React.ReactNode
       expectedAmount,
       difference,
       justification,
-      status: 'pending'
+      status: 'pending',
+      receipt
     };
 
     setBankDeposits(prev => [deposit, ...prev]);
@@ -246,10 +248,10 @@ export function ReconciliationProvider({ children }: { children: React.ReactNode
 
   const getDeposits = (sellerId?: string, period: string = 'week'): BankDeposit[] => {
     let filtered = sellerId ? bankDeposits.filter(dep => dep.sellerId === sellerId) : bankDeposits;
-    
+
     const now = new Date();
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    
+
     switch (period) {
       case 'today':
         return filtered.filter(dep => {
@@ -268,14 +270,14 @@ export function ReconciliationProvider({ children }: { children: React.ReactNode
   };
 
   const updateDepositStatus = (depositId: string, status: string, managerId?: string, managerName?: string) => {
-    setBankDeposits(prev => 
-      prev.map(dep => 
-        dep.id === depositId 
+    setBankDeposits(prev =>
+      prev.map(dep =>
+        dep.id === depositId
           ? { ...dep, status: status as any }
           : dep
       )
     );
-    
+
     addAuditEntry('deposit_status_update', `Estado de depósito actualizado a ${status}`, undefined, { depositId, status, managerId, managerName });
     saveData();
   };
@@ -321,10 +323,10 @@ export function ReconciliationProvider({ children }: { children: React.ReactNode
 
   const getReconciliations = (sellerId?: string, period: string = 'week'): Reconciliation[] => {
     let filtered = sellerId ? reconciliations.filter(rec => rec.sellerId === sellerId) : reconciliations;
-    
+
     const now = new Date();
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    
+
     switch (period) {
       case 'today':
         return filtered.filter(rec => {
@@ -343,11 +345,11 @@ export function ReconciliationProvider({ children }: { children: React.ReactNode
   };
 
   const approveReconciliation = (reconciliationId: string, managerId: string, managerName: string, notes?: string) => {
-    setReconciliations(prev => 
-      prev.map(rec => 
-        rec.id === reconciliationId 
-          ? { 
-              ...rec, 
+    setReconciliations(prev =>
+      prev.map(rec =>
+        rec.id === reconciliationId
+          ? {
+              ...rec,
               status: 'approved',
               managerApproval: {
                 managerId,
@@ -359,7 +361,7 @@ export function ReconciliationProvider({ children }: { children: React.ReactNode
           : rec
       )
     );
-    
+
     addAuditEntry('reconciliation_approved', `Conciliación aprobada por ${managerName}`, undefined, { reconciliationId, managerId, managerName, notes });
     saveData();
   };
@@ -384,7 +386,7 @@ export function ReconciliationProvider({ children }: { children: React.ReactNode
   };
 
   const getAuditTrail = (entityId: string, entityType: string): AuditEntry[] => {
-    return auditTrail.filter(entry => 
+    return auditTrail.filter(entry =>
       entry.details.includes(entityId) || entry.details.includes(entityType)
     );
   };
@@ -403,7 +405,7 @@ export function ReconciliationProvider({ children }: { children: React.ReactNode
   const getNextDayPreparation = (sellerId: string) => {
     const today = new Date();
     const routeClosure = getRouteClosure(sellerId, today);
-    
+
     if (!routeClosure) return null;
 
     return {
@@ -441,4 +443,4 @@ export function useReconciliation() {
     throw new Error('useReconciliation must be used within a ReconciliationProvider');
   }
   return context;
-} 
+}

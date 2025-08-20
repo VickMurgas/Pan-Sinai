@@ -11,6 +11,16 @@ interface ReceiptProps {
     sellerName: string;
     date: Date;
     total: number;
+    returns?: Array<{
+      originalProductName: string;
+      quantity: number;
+      originalPrice: number;
+      replacementProductName?: string;
+      replacementPrice?: number;
+      reason?: string;
+      note?: string;
+    }>;
+    returnAdjustment?: number;
     products?: Array<{
       productId: string;
       productCode: string;
@@ -58,15 +68,15 @@ export default function Receipt({ sale, onClose }: ReceiptProps) {
       Vendedor: ${sale.sellerName}
       Fecha: ${formatDate(sale.date)}
       Método de Pago: ${sale.metodoPago}
-      
+
       PRODUCTOS:
-      ${sale.products?.map(product => 
+      ${sale.products?.map(product =>
         `${product.productCode} ${product.productName}: ${product.quantity} unidades x ${formatCurrency(product.price)} cada una, total ${formatCurrency(product.subtotal)}`
       ).join('\n') || 'Sin productos detallados'}
-      
+
       TOTAL: ${formatCurrency(sale.total)}
     `;
-    
+
     const blob = new Blob([receiptContent], { type: 'text/plain' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -122,14 +132,14 @@ export default function Receipt({ sale, onClose }: ReceiptProps) {
               <span className="text-sm text-gray-600">ID de Venta:</span>
               <span className="font-semibold text-pan-sinai-dark-brown">{sale.id}</span>
             </div>
-            
+
             {sale.numero && (
               <div className="flex items-center justify-between">
                 <span className="text-sm text-gray-600">Número:</span>
                 <span className="font-semibold text-pan-sinai-dark-brown">{sale.numero}</span>
               </div>
             )}
-            
+
             {sale.customerName && (
               <div className="flex items-center space-x-2">
                 <User className="w-4 h-4 text-gray-500" />
@@ -141,7 +151,7 @@ export default function Receipt({ sale, onClose }: ReceiptProps) {
                 </div>
               </div>
             )}
-            
+
             <div className="flex items-center space-x-2">
               <User className="w-4 h-4 text-gray-500" />
               <div className="flex-1">
@@ -151,7 +161,7 @@ export default function Receipt({ sale, onClose }: ReceiptProps) {
                 </span>
               </div>
             </div>
-            
+
             <div className="flex items-center space-x-2">
               <Calendar className="w-4 h-4 text-gray-500" />
               <div className="flex-1">
@@ -161,7 +171,7 @@ export default function Receipt({ sale, onClose }: ReceiptProps) {
                 </span>
               </div>
             </div>
-            
+
             {sale.metodoPago && (
               <div className="flex items-center space-x-2">
                 <DollarSign className="w-4 h-4 text-gray-500" />
@@ -181,7 +191,7 @@ export default function Receipt({ sale, onClose }: ReceiptProps) {
               <Package className="w-4 h-4 text-gray-500" />
               <h3 className="font-semibold text-pan-sinai-dark-brown">Productos</h3>
             </div>
-            
+
             <div className="space-y-2">
               {sale.products?.map((product, index) => (
                 <div key={index} className="flex justify-between items-center py-2 border-b border-gray-100">
@@ -205,21 +215,63 @@ export default function Receipt({ sale, onClose }: ReceiptProps) {
             </div>
           </div>
 
+          {/* Devoluciones / Intercambios */}
+          {(sale.returns && sale.returns.length > 0) && (
+            <div className="space-y-3">
+              <div className="flex items-center space-x-2">
+                <Package className="w-4 h-4 text-gray-500" />
+                <h3 className="font-semibold text-pan-sinai-dark-brown">Devoluciones / Intercambios</h3>
+              </div>
+              <div className="space-y-2">
+                {sale.returns?.map((r, index) => (
+                  <div key={index} className="flex justify-between items-center py-2 border-b border-gray-100">
+                    <div className="flex-1">
+                      <div className="font-medium text-pan-sinai-dark-brown">
+                        {r.originalProductName} × {r.quantity}
+                      </div>
+                      <div className="text-xs text-gray-600">
+                        {r.replacementProductName ? `Reemplazo: ${r.replacementProductName}` : 'Reembolso'}
+                        {r.note ? ` • ${r.note}` : ''}
+                        {r.reason ? ` • Motivo: ${r.reason}` : ''}
+                      </div>
+                    </div>
+                    <div className={`font-semibold ${((r.replacementPrice ?? r.originalPrice) - r.originalPrice) * r.quantity >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                      {(() => {
+                        const diff = ((r.replacementPrice ?? r.originalPrice) - r.originalPrice) * r.quantity;
+                        return `${diff >= 0 ? '+' : ''}${formatCurrency(diff)}`;
+                      })()}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Total */}
           <div className="border-t border-gray-200 pt-4">
-            <div className="flex justify-between items-center">
-              <span className="text-lg font-semibold text-pan-sinai-dark-brown">Total:</span>
-              <span className="text-xl font-bold text-pan-sinai-gold">
-                {formatCurrency(sale.total)}
-              </span>
+            <div className="space-y-1">
+              {(sale.returnAdjustment !== undefined) && (
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-gray-600">Ajuste por devoluciones</span>
+                  <span className={`text-sm ${((sale.returnAdjustment || 0) as number) < 0 ? 'text-red-600' : 'text-green-600'}`}>
+                    {((sale.returnAdjustment || 0) as number) >= 0 ? '+' : ''}{formatCurrency((sale.returnAdjustment || 0) as number)}
+                  </span>
+                </div>
+              )}
+              <div className="flex justify-between items-center">
+                <span className="text-lg font-semibold text-pan-sinai-dark-brown">Total:</span>
+                <span className="text-xl font-bold text-pan-sinai-gold">
+                  {formatCurrency(sale.total)}
+                </span>
+              </div>
             </div>
           </div>
 
           {/* Estado de la venta */}
           <div className="flex items-center justify-center">
             <span className={`px-3 py-1 rounded-full text-sm font-medium ${
-              sale.status === 'completed' 
-                ? 'bg-green-100 text-green-800' 
+              sale.status === 'completed'
+                ? 'bg-green-100 text-green-800'
                 : 'bg-yellow-100 text-yellow-800'
             }`}>
               {sale.status === 'completed' ? 'Completada' : 'En Proceso'}
@@ -236,7 +288,7 @@ export default function Receipt({ sale, onClose }: ReceiptProps) {
             <Printer className="w-4 h-4" />
             <span className="text-sm font-medium">Imprimir</span>
           </button>
-          
+
           <button
             onClick={handleDownload}
             className="flex-1 flex items-center justify-center space-x-2 bg-gray-600 text-white py-2 px-4 rounded-lg hover:bg-gray-700 transition-colors"
@@ -244,7 +296,7 @@ export default function Receipt({ sale, onClose }: ReceiptProps) {
             <Download className="w-4 h-4" />
             <span className="text-sm font-medium">Descargar</span>
           </button>
-          
+
           <button
             onClick={handleShare}
             className="flex-1 flex items-center justify-center space-x-2 bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors"
@@ -256,4 +308,4 @@ export default function Receipt({ sale, onClose }: ReceiptProps) {
       </div>
     </div>
   );
-} 
+}

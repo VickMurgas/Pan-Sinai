@@ -19,11 +19,11 @@ export default function SafeInitializer({ children }: SafeInitializerProps) {
         if (typeof window !== 'undefined') {
           // Cargar datos iniciales si no existen
           const hasInitialData = localStorage.getItem('pan-sinai-initialized');
-          
+
           if (!hasInitialData) {
             // Inicializar datos por defecto
             localStorage.setItem('pan-sinai-initialized', 'true');
-            
+
             // Datos de prueba para usuarios
             const defaultUsers = [
               { id: '1', name: 'Juan Vendedor', role: 'Vendedor', username: 'vendedor', password: '123' },
@@ -31,7 +31,7 @@ export default function SafeInitializer({ children }: SafeInitializerProps) {
               { id: '3', name: 'Carlos Gerente', role: 'Gerente', username: 'gerente', password: '123' }
             ];
             localStorage.setItem('pan-sinai-users', JSON.stringify(defaultUsers));
-            
+
             // Datos de prueba para productos
             const defaultProducts = [
               { id: '1', code: 'B01', name: 'Muffin Naranja', price: 1.25, stock: 15, category: 'pan_dulce' },
@@ -39,7 +39,7 @@ export default function SafeInitializer({ children }: SafeInitializerProps) {
               { id: '3', code: 'T01', name: 'Torta Yema', price: 8.00, stock: 3, category: 'tortas' }
             ];
             localStorage.setItem('pan-sinai-products', JSON.stringify(defaultProducts));
-            
+
             // Datos de prueba para clientes
             const defaultCustomers = [
               { id: '1', businessName: 'Tienda San Miguel', owner: 'Juan Pérez', phone: '7123-4567', address: 'Calle Principal #123' },
@@ -49,10 +49,10 @@ export default function SafeInitializer({ children }: SafeInitializerProps) {
             localStorage.setItem('pan-sinai-customers', JSON.stringify(defaultCustomers));
           }
         }
-        
-        // Simular delay de carga
-        await new Promise(resolve => setTimeout(resolve, 500));
-        
+
+        // Simular delay de carga (más rápido)
+        await new Promise(resolve => setTimeout(resolve, 200));
+
         setIsInitialized(true);
       } catch (error) {
         console.error('Error during initialization:', error);
@@ -85,4 +85,4 @@ export default function SafeInitializer({ children }: SafeInitializerProps) {
   }
 
   return <>{children}</>;
-} 
+}

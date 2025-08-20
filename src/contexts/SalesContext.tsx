@@ -1,18 +1,19 @@
 'use client';
 
 import React, { createContext, useContext, useReducer, useEffect, useCallback } from 'react';
-import { 
-  Product, 
-  CartState, 
-  CartItem, 
-  Sale, 
-  SaleProduct, 
-  ProductoSugerido, 
+import {
+  Product,
+  CartState,
+  CartItem,
+  Sale,
+  SaleProduct,
+  ProductoSugerido,
   StockAlerta,
   MetodoPago,
   DevolucionIntercambio,
   ProductoDevuelto,
-  Customer
+  Customer,
+  ReturnCartItem
 } from '../types';
 
 // Estado inicial del carrito
@@ -22,7 +23,10 @@ const initialCartState: CartState = {
   descuento: 0,
   total: 0,
   metodoPago: 'efectivo',
-  cliente: undefined
+  cliente: undefined,
+  hasReturns: false,
+  returnItems: [],
+  ajusteDevoluciones: 0
 };
 
 // Métodos de pago disponibles
@@ -44,7 +48,24 @@ type SalesAction =
   | { type: 'UPDATE_STOCK'; payload: { productId: string; stock: number } }
   | { type: 'SET_ALERTAS_STOCK'; payload: { alertas: StockAlerta[] } }
   | { type: 'ADD_SALE'; payload: { venta: Sale } }
-  | { type: 'ADD_DEVOLUCION'; payload: { devolucion: DevolucionIntercambio } };
+  | { type: 'ADD_DEVOLUCION'; payload: { devolucion: DevolucionIntercambio } }
+  | { type: 'SET_HAS_RETURNS'; payload: { hasReturns: boolean } }
+  | { type: 'ADD_RETURN_ITEM'; payload: { item: ReturnCartItem } }
+  | { type: 'UPDATE_RETURN_ITEM'; payload: { index: number; item: ReturnCartItem } }
+  | { type: 'REMOVE_RETURN_ITEM'; payload: { index: number } };
+
+function calculateReturnAdjustment(returnItems: ReturnCartItem[] | undefined): number {
+  if (!returnItems || returnItems.length === 0) return 0;
+  return returnItems.reduce((sum, r) => {
+    // Si no hay reemplazo, es una devolución pura: resta el valor original
+    if (r.replacementPrice === undefined && r.replacementProductId === undefined && r.replacementProductCode === undefined) {
+      return sum - (r.originalPrice * r.quantity);
+    }
+    const replacementPrice = r.replacementPrice ?? r.originalPrice;
+    const diff = (replacementPrice - r.originalPrice) * r.quantity;
+    return sum + diff;
+  }, 0);
+}
 
 // Estado del contexto
 interface SalesContextState {
@@ -76,7 +97,7 @@ function salesReducer(state: SalesContextState, action: SalesAction): SalesConte
     case 'ADD_TO_CART': {
       const { product, quantity } = action.payload;
       const existingItem = state.cart.items.find(item => item.product.id === product.id);
-      
+
       let newItems: CartItem[];
       if (existingItem) {
         newItems = state.cart.items.map(item =>
@@ -92,17 +113,19 @@ function salesReducer(state: SalesContextState, action: SalesAction): SalesConte
           stockDisponible: product.stock
         }];
       }
-      
+
       const subtotal = newItems.reduce((sum, item) => sum + item.subtotal, 0);
-      const total = subtotal - state.cart.descuento;
-      
+      const ajusteDevoluciones = calculateReturnAdjustment(state.cart.returnItems);
+      const total = subtotal - state.cart.descuento + ajusteDevoluciones;
+
       return {
         ...state,
         cart: {
           ...state.cart,
           items: newItems,
           subtotal,
-          total
+          total,
+          ajusteDevoluciones
         }
       };
     }
@@ -110,15 +133,17 @@ function salesReducer(state: SalesContextState, action: SalesAction): SalesConte
     case 'REMOVE_FROM_CART': {
       const newItems = state.cart.items.filter(item => item.product.id !== action.payload.productId);
       const subtotal = newItems.reduce((sum, item) => sum + item.subtotal, 0);
-      const total = subtotal - state.cart.descuento;
-      
+      const ajusteDevoluciones = calculateReturnAdjustment(state.cart.returnItems);
+      const total = subtotal - state.cart.descuento + ajusteDevoluciones;
+
       return {
         ...state,
         cart: {
           ...state.cart,
           items: newItems,
           subtotal,
-          total
+          total,
+          ajusteDevoluciones
         }
       };
     }
@@ -130,17 +155,19 @@ function salesReducer(state: SalesContextState, action: SalesAction): SalesConte
           ? { ...item, quantity, subtotal: quantity * item.product.price }
           : item
       );
-      
+
       const subtotal = newItems.reduce((sum, item) => sum + item.subtotal, 0);
-      const total = subtotal - state.cart.descuento;
-      
+      const ajusteDevoluciones = calculateReturnAdjustment(state.cart.returnItems);
+      const total = subtotal - state.cart.descuento + ajusteDevoluciones;
+
       return {
         ...state,
         cart: {
           ...state.cart,
           items: newItems,
           subtotal,
-          total
+          total,
+          ajusteDevoluciones
         }
       };
     }
@@ -161,13 +188,15 @@ function salesReducer(state: SalesContextState, action: SalesAction): SalesConte
       };
 
     case 'SET_DISCOUNT': {
-      const total = state.cart.subtotal - action.payload.descuento;
+      const ajusteDevoluciones = calculateReturnAdjustment(state.cart.returnItems);
+      const total = state.cart.subtotal - action.payload.descuento + ajusteDevoluciones;
       return {
         ...state,
         cart: {
           ...state.cart,
           descuento: action.payload.descuento,
-          total
+          total,
+          ajusteDevoluciones
         }
       };
     }
@@ -186,14 +215,14 @@ function salesReducer(state: SalesContextState, action: SalesAction): SalesConte
       const newProductos = state.productos.map(product =>
         product.id === productId ? { ...product, stock } : product
       );
-      
+
       // Actualizar stock en el carrito también
       const newCartItems = state.cart.items.map(item =>
         item.product.id === productId
           ? { ...item, stockDisponible: stock }
           : item
       );
-      
+
       return {
         ...state,
         productos: newProductos,
@@ -222,6 +251,71 @@ function salesReducer(state: SalesContextState, action: SalesAction): SalesConte
         devoluciones: [...state.devoluciones, action.payload.devolucion]
       };
 
+    case 'SET_HAS_RETURNS': {
+      const hasReturns = action.payload.hasReturns;
+      const returnItems = hasReturns ? (state.cart.returnItems || []) : [];
+      const ajusteDevoluciones = calculateReturnAdjustment(returnItems);
+      const total = state.cart.subtotal - state.cart.descuento + ajusteDevoluciones;
+      return {
+        ...state,
+        cart: {
+          ...state.cart,
+          hasReturns,
+          returnItems,
+          ajusteDevoluciones,
+          total
+        }
+      };
+    }
+
+    case 'ADD_RETURN_ITEM': {
+      const returnItems = [...(state.cart.returnItems || []), action.payload.item];
+      const ajusteDevoluciones = calculateReturnAdjustment(returnItems);
+      const total = state.cart.subtotal - state.cart.descuento + ajusteDevoluciones;
+      return {
+        ...state,
+        cart: {
+          ...state.cart,
+          hasReturns: true,
+          returnItems,
+          ajusteDevoluciones,
+          total
+        }
+      };
+    }
+
+    case 'UPDATE_RETURN_ITEM': {
+      const returnItems = (state.cart.returnItems || []).map((it, idx) => idx === action.payload.index ? action.payload.item : it);
+      const ajusteDevoluciones = calculateReturnAdjustment(returnItems);
+      const total = state.cart.subtotal - state.cart.descuento + ajusteDevoluciones;
+      return {
+        ...state,
+        cart: {
+          ...state.cart,
+          returnItems,
+          ajusteDevoluciones,
+          total
+        }
+      };
+    }
+
+    case 'REMOVE_RETURN_ITEM': {
+      const returnItems = (state.cart.returnItems || []).filter((_, idx) => idx !== action.payload.index);
+      const hasReturns = returnItems.length > 0 ? true : false;
+      const ajusteDevoluciones = calculateReturnAdjustment(returnItems);
+      const total = state.cart.subtotal - state.cart.descuento + ajusteDevoluciones;
+      return {
+        ...state,
+        cart: {
+          ...state.cart,
+          hasReturns,
+          returnItems,
+          ajusteDevoluciones,
+          total
+        }
+      };
+    }
+
     default:
       return state;
   }
@@ -244,6 +338,13 @@ const SalesContext = createContext<{
   validateStock: (productId: string, quantity: number) => { valid: boolean; message?: string };
   updateProductStock: (productId: string, stock: number) => void;
   getStockAlerts: () => StockAlerta[];
+  getSalesHistory: () => Sale[];
+  getSalesBySeller: (sellerId: string) => Sale[];
+  // Devoluciones integradas
+  setHasReturns: (has: boolean) => void;
+  addReturnItem: (item: ReturnCartItem) => void;
+  updateReturnItem: (index: number, item: ReturnCartItem) => void;
+  removeReturnItem: (index: number) => void;
 } | undefined>(undefined);
 
 // Provider del contexto
@@ -319,7 +420,7 @@ export function SalesProvider({ children }: { children: React.ReactNode }) {
         }));
 
       dispatch({ type: 'SET_ALERTAS_STOCK', payload: { alertas } });
-      
+
       // Actualizar productos en el estado
       productosMock.forEach(product => {
         dispatch({ type: 'UPDATE_STOCK', payload: { productId: product.id, stock: product.stock } });
@@ -329,15 +430,61 @@ export function SalesProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  // Validar stock
+  const validateStock = useCallback((productId: string, quantity: number): { valid: boolean; message?: string } => {
+    const product = state.productos.find(p => p.id === productId || p.code === productId);
+    if (!product) {
+      return { valid: false, message: 'Producto no encontrado' };
+    }
+
+    if (!product.activo) {
+      return { valid: false, message: 'Producto no disponible' };
+    }
+
+    if (product.stock < quantity) {
+      return {
+        valid: false,
+        message: `Solo hay ${product.stock} unidades disponibles de ${product.name}`
+      };
+    }
+
+    return { valid: true };
+  }, [state.productos]);
+
   // Agregar producto al carrito
   const addToCart = useCallback((product: Product, quantity: number) => {
-    const validation = validateStock(product.id, quantity);
-    if (!validation.valid) {
-      throw new Error(validation.message);
+    const externalId = (product as any).id;
+    const internal = state.productos.find(p => p.id === externalId || p.code === externalId);
+
+    if (internal) {
+      const validation = validateStock(internal.id, quantity);
+      if (!validation.valid) {
+        throw new Error(validation.message);
+      }
+      dispatch({ type: 'ADD_TO_CART', payload: { product: { ...internal } as any, quantity } });
+      return;
     }
-    
-    dispatch({ type: 'ADD_TO_CART', payload: { product, quantity } });
-  }, []);
+
+    // Fallback: producto externo (p.ej. Producto Rápido) que no existe en el catálogo del contexto
+    const available = (product as any).stock ?? 0;
+    if (available < quantity) {
+      throw new Error(`Solo hay ${available} unidades disponibles de ${(product as any).name || 'este producto'}`);
+    }
+    const enriched: Product = {
+      // usar el id externo para mantener coherencia en el carrito
+      id: externalId,
+      code: (product as any).code || externalId,
+      name: (product as any).name,
+      price: (product as any).price,
+      stock: (product as any).stock,
+      category: (product as any).category || 'General',
+      perecedero: true,
+      stockMinimo: 1,
+      activo: true
+    } as any;
+
+    dispatch({ type: 'ADD_TO_CART', payload: { product: enriched, quantity } });
+  }, [state.productos, validateStock]);
 
   // Remover producto del carrito
   const removeFromCart = useCallback((productId: string) => {
@@ -346,13 +493,25 @@ export function SalesProvider({ children }: { children: React.ReactNode }) {
 
   // Actualizar cantidad en carrito
   const updateQuantity = useCallback((productId: string, quantity: number) => {
-    const validation = validateStock(productId, quantity);
-    if (!validation.valid) {
-      throw new Error(validation.message);
+    // Buscar por id directo o por code para items internos
+    const cartItem = state.cart.items.find(i => i.product.id === productId || (i.product as any).code === productId);
+    if (cartItem) {
+      const internal = state.productos.find(p => p.id === cartItem.product.id || p.code === cartItem.product.id);
+      if (internal) {
+        const validation = validateStock(internal.id, quantity);
+        if (!validation.valid) {
+          throw new Error(validation.message);
+        }
+      } else {
+        // item externo: validar contra su propio stockDisponible
+        if (cartItem.stockDisponible < quantity) {
+          throw new Error(`Solo hay ${cartItem.stockDisponible} unidades disponibles de ${cartItem.product.name}`);
+        }
+      }
     }
-    
+
     dispatch({ type: 'UPDATE_QUANTITY', payload: { productId, quantity } });
-  }, []);
+  }, [state.cart.items, state.productos, validateStock]);
 
   // Limpiar carrito
   const clearCart = useCallback(() => {
@@ -374,6 +533,23 @@ export function SalesProvider({ children }: { children: React.ReactNode }) {
     dispatch({ type: 'SET_CUSTOMER', payload: { cliente } });
   }, []);
 
+  // Devoluciones integradas en carrito
+  const setHasReturns = useCallback((has: boolean) => {
+    dispatch({ type: 'SET_HAS_RETURNS', payload: { hasReturns: has } });
+  }, []);
+
+  const addReturnItem = useCallback((item: ReturnCartItem) => {
+    dispatch({ type: 'ADD_RETURN_ITEM', payload: { item } });
+  }, []);
+
+  const updateReturnItem = useCallback((index: number, item: ReturnCartItem) => {
+    dispatch({ type: 'UPDATE_RETURN_ITEM', payload: { index, item } });
+  }, []);
+
+  const removeReturnItem = useCallback((index: number) => {
+    dispatch({ type: 'REMOVE_RETURN_ITEM', payload: { index } });
+  }, []);
+
   // Procesar venta
   const processSale = useCallback(async (): Promise<Sale | null> => {
     if (state.cart.items.length === 0) {
@@ -388,7 +564,7 @@ export function SalesProvider({ children }: { children: React.ReactNode }) {
         customerName: state.cart.cliente?.businessName,
         products: state.cart.items.map(item => ({
           productId: item.product.id,
-          productCode: item.product.code,
+          productCode: (item.product as any).code || item.product.id,
           productName: item.product.name,
           quantity: item.quantity,
           price: item.product.price,
@@ -402,14 +578,42 @@ export function SalesProvider({ children }: { children: React.ReactNode }) {
         fecha: new Date(),
         sellerId: 'current-user', // En producción sería el usuario actual
         sellerName: 'Vendedor Actual',
-        status: 'completada'
+        status: 'completada',
+        tieneDevoluciones: state.cart.hasReturns,
+        returnItems: state.cart.returnItems,
+        ajusteDevoluciones: state.cart.ajusteDevoluciones
       };
 
-      // Actualizar stock de productos
+      // Actualizar stock de productos vendidos
       state.cart.items.forEach(item => {
-        const newStock = item.product.stock - item.quantity;
-        dispatch({ type: 'UPDATE_STOCK', payload: { productId: item.product.id, stock: newStock } });
+        const matched = state.productos.find(p =>
+          p.id === item.product.id ||
+          p.code === (item.product as any).code ||
+          p.code === item.product.id
+        );
+        if (matched) {
+          const newStock = matched.stock - item.quantity;
+          dispatch({ type: 'UPDATE_STOCK', payload: { productId: matched.id, stock: newStock } });
+        }
       });
+
+      // Actualizar stock por devoluciones/intercambios integrados
+      if (state.cart.hasReturns && state.cart.returnItems && state.cart.returnItems.length > 0) {
+        state.cart.returnItems.forEach(r => {
+          // Sumar al stock del producto devuelto
+          const original = state.productos.find(p => p.id === r.originalProductId || p.code === r.originalProductCode);
+          if (original) {
+            dispatch({ type: 'UPDATE_STOCK', payload: { productId: original.id, stock: original.stock + r.quantity } });
+          }
+          // Restar del stock del producto de reemplazo si existe
+          if (r.replacementProductId || r.replacementProductCode) {
+            const replacement = state.productos.find(p => p.id === (r.replacementProductId as any) || p.code === (r.replacementProductCode as any));
+            if (replacement) {
+              dispatch({ type: 'UPDATE_STOCK', payload: { productId: replacement.id, stock: replacement.stock - r.quantity } });
+            }
+          }
+        });
+      }
 
       // Agregar venta al historial
       dispatch({ type: 'ADD_SALE', payload: { venta } });
@@ -440,7 +644,7 @@ export function SalesProvider({ children }: { children: React.ReactNode }) {
         const currentProduct = state.productos.find(p => p.id === producto.productId);
         if (currentProduct) {
           let newStock = currentProduct.stock;
-          
+
           if (devolucion.tipo === 'devolucion') {
             // Devolución: agregar stock
             newStock += producto.quantity;
@@ -450,17 +654,17 @@ export function SalesProvider({ children }: { children: React.ReactNode }) {
             if (producto.productoIntercambioId) {
               const productoIntercambio = state.productos.find(p => p.id === producto.productoIntercambioId);
               if (productoIntercambio) {
-                dispatch({ 
-                  type: 'UPDATE_STOCK', 
-                  payload: { 
-                    productId: producto.productoIntercambioId, 
-                    stock: productoIntercambio.stock - producto.quantity 
-                  } 
+                dispatch({
+                  type: 'UPDATE_STOCK',
+                  payload: {
+                    productId: producto.productoIntercambioId,
+                    stock: productoIntercambio.stock - producto.quantity
+                  }
                 });
               }
             }
           }
-          
+
           dispatch({ type: 'UPDATE_STOCK', payload: { productId: producto.productId, stock: newStock } });
         }
       });
@@ -478,7 +682,7 @@ export function SalesProvider({ children }: { children: React.ReactNode }) {
   // Buscar productos
   const searchProducts = useCallback((query: string): Product[] => {
     if (!query.trim()) return state.productos;
-    
+
     const searchTerm = query.toLowerCase();
     return state.productos.filter(product =>
       product.activo && (
@@ -497,9 +701,9 @@ export function SalesProvider({ children }: { children: React.ReactNode }) {
     const suggestions: ProductoSugerido[] = [];
 
     // Productos similares (misma categoría)
-    const similares = state.productos.filter(p => 
-      p.id !== productId && 
-      p.activo && 
+    const similares = state.productos.filter(p =>
+      p.id !== productId &&
+      p.activo &&
       p.category === currentProduct.category &&
       p.stock > 0
     ).slice(0, 3);
@@ -513,9 +717,9 @@ export function SalesProvider({ children }: { children: React.ReactNode }) {
     });
 
     // Productos con stock alto
-    const conStock = state.productos.filter(p => 
-      p.id !== productId && 
-      p.activo && 
+    const conStock = state.productos.filter(p =>
+      p.id !== productId &&
+      p.activo &&
       p.stock > p.stockMinimo * 2
     ).slice(0, 2);
 
@@ -530,26 +734,7 @@ export function SalesProvider({ children }: { children: React.ReactNode }) {
     return suggestions;
   }, [state.productos]);
 
-  // Validar stock
-  const validateStock = useCallback((productId: string, quantity: number): { valid: boolean; message?: string } => {
-    const product = state.productos.find(p => p.id === productId);
-    if (!product) {
-      return { valid: false, message: 'Producto no encontrado' };
-    }
 
-    if (!product.activo) {
-      return { valid: false, message: 'Producto no disponible' };
-    }
-
-    if (product.stock < quantity) {
-      return { 
-        valid: false, 
-        message: `Solo hay ${product.stock} unidades disponibles de ${product.name}` 
-      };
-    }
-
-    return { valid: true };
-  }, [state.productos]);
 
   // Actualizar stock de producto
   const updateProductStock = useCallback((productId: string, stock: number) => {
@@ -588,7 +773,11 @@ export function SalesProvider({ children }: { children: React.ReactNode }) {
     updateProductStock,
     getStockAlerts,
     getSalesHistory,
-    getSalesBySeller
+    getSalesBySeller,
+    setHasReturns,
+    addReturnItem,
+    updateReturnItem,
+    removeReturnItem
   };
 
   return (
@@ -605,4 +794,4 @@ export function useSales() {
     throw new Error('useSales debe ser usado dentro de un SalesProvider');
   }
   return context;
-} 
+}
