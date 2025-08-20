@@ -3,10 +3,10 @@
 import React, { useState } from 'react';
 import { useReconciliation } from '@/contexts/ReconciliationContext';
 import { useAuth } from '@/contexts/AuthContext';
-import { 
-  DollarSign, 
-  AlertTriangle, 
-  CheckCircle, 
+import {
+  DollarSign,
+  AlertTriangle,
+  CheckCircle,
   XCircle,
   FileText,
   Upload,
@@ -18,7 +18,7 @@ import {
 export default function BankDeposit() {
   const { user } = useAuth();
   const { registerDeposit, getRouteClosure, getDeposits } = useReconciliation();
-  
+
   const [amount, setAmount] = useState('');
   const [bankAccount, setBankAccount] = useState('');
   const [reference, setReference] = useState('');
@@ -26,11 +26,12 @@ export default function BankDeposit() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showConfirmation, setShowConfirmation] = useState(false);
   const [depositResult, setDepositResult] = useState<any>(null);
+  const [receiptImage, setReceiptImage] = useState<string | null>(null);
 
   // Obtener datos del día
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  
+
   const routeClosure = user ? getRouteClosure(user.id, today) : null;
   const todayDeposits = user ? getDeposits(user.id, 'today') : [];
   const expectedAmount = routeClosure?.totalRevenue || 0;
@@ -38,7 +39,7 @@ export default function BankDeposit() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!user || !amount || !bankAccount || !reference) {
       alert('Por favor completa todos los campos requeridos');
       return;
@@ -49,7 +50,7 @@ export default function BankDeposit() {
 
   const handleConfirmDeposit = async () => {
     if (!user) return;
-    
+
     setIsSubmitting(true);
     try {
       const deposit = await registerDeposit(
@@ -58,16 +59,18 @@ export default function BankDeposit() {
         parseFloat(amount),
         bankAccount,
         reference,
-        justification
+        justification,
+        receiptImage || undefined
       );
       setDepositResult(deposit);
       setShowConfirmation(false);
-      
+
       // Limpiar formulario
       setAmount('');
       setBankAccount('');
       setReference('');
       setJustification('');
+      setReceiptImage(null);
     } catch (error) {
       alert('Error al registrar el depósito: ' + error);
     } finally {
@@ -104,31 +107,31 @@ export default function BankDeposit() {
         {/* Detalles del depósito */}
         <div className="bg-white rounded-xl shadow-lg p-6">
           <h3 className="text-xl font-bold text-pan-sinai-dark-brown mb-6">Detalles del Depósito</h3>
-          
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="space-y-4">
               <div>
                 <p className="text-sm text-pan-sinai-brown">Monto Depositado</p>
                 <p className="text-2xl font-bold text-pan-sinai-dark-brown">${depositResult.amount.toFixed(2)}</p>
               </div>
-              
+
               <div>
                 <p className="text-sm text-pan-sinai-brown">Cuenta Bancaria</p>
                 <p className="font-semibold text-pan-sinai-dark-brown">{depositResult.bankAccount}</p>
               </div>
-              
+
               <div>
                 <p className="text-sm text-pan-sinai-brown">Referencia</p>
                 <p className="font-semibold text-pan-sinai-dark-brown">{depositResult.reference}</p>
               </div>
             </div>
-            
+
             <div className="space-y-4">
               <div>
                 <p className="text-sm text-pan-sinai-brown">Monto Esperado</p>
                 <p className="text-lg font-semibold text-pan-sinai-dark-brown">${depositResult.expectedAmount.toFixed(2)}</p>
               </div>
-              
+
               <div>
                 <p className="text-sm text-pan-sinai-brown">Diferencia</p>
                 <div className="flex items-center space-x-2">
@@ -138,7 +141,7 @@ export default function BankDeposit() {
                   </p>
                 </div>
               </div>
-              
+
               <div>
                 <p className="text-sm text-pan-sinai-brown">Estado</p>
                 <span className={`px-3 py-1 rounded-full text-sm font-medium ${
@@ -152,6 +155,13 @@ export default function BankDeposit() {
               </div>
             </div>
           </div>
+
+          {depositResult.receipt && (
+            <div className="mt-6">
+              <p className="text-sm font-semibold text-pan-sinai-dark-brown mb-2">Comprobante</p>
+              <img src={depositResult.receipt} alt="Comprobante del depósito" className="max-h-72 rounded-lg border border-gray-200" />
+            </div>
+          )}
 
           {depositResult.justification && (
             <div className="mt-6 p-4 bg-gray-50 rounded-lg">
@@ -172,7 +182,7 @@ export default function BankDeposit() {
               <FileText className="w-4 h-4" />
               <span>Imprimir Comprobante</span>
             </button>
-            
+
             <button
               onClick={() => setDepositResult(null)}
               className="bg-pan-sinai-brown text-white px-6 py-3 rounded-lg hover:bg-pan-sinai-dark-brown transition-colors font-medium"
@@ -202,7 +212,7 @@ export default function BankDeposit() {
       {routeClosure && (
         <div className="bg-white rounded-xl shadow-lg p-6">
           <h3 className="text-xl font-bold text-pan-sinai-dark-brown mb-4">Resumen del Día</h3>
-          
+
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div className="bg-blue-50 rounded-lg p-4">
               <div className="flex items-center space-x-3">
@@ -213,7 +223,7 @@ export default function BankDeposit() {
                 </div>
               </div>
             </div>
-            
+
             <div className="bg-green-50 rounded-lg p-4">
               <div className="flex items-center space-x-3">
                 <CheckCircle className="w-6 h-6 text-green-600" />
@@ -223,7 +233,7 @@ export default function BankDeposit() {
                 </div>
               </div>
             </div>
-            
+
             <div className="bg-purple-50 rounded-lg p-4">
               <div className="flex items-center space-x-3">
                 <Clock className="w-6 h-6 text-purple-600" />
@@ -242,7 +252,7 @@ export default function BankDeposit() {
       {/* Formulario de depósito */}
       <div className="bg-white rounded-xl shadow-lg p-6">
         <h3 className="text-xl font-bold text-pan-sinai-dark-brown mb-6">Información del Depósito</h3>
-        
+
         <form onSubmit={handleSubmit} className="space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
@@ -263,7 +273,7 @@ export default function BankDeposit() {
                 />
               </div>
             </div>
-            
+
             <div>
               <label className="block text-sm font-medium text-pan-sinai-dark-brown mb-2">
                 Cuenta Bancaria *
@@ -282,7 +292,7 @@ export default function BankDeposit() {
               </select>
             </div>
           </div>
-          
+
           <div>
             <label className="block text-sm font-medium text-pan-sinai-dark-brown mb-2">
               Número de Referencia *
@@ -296,7 +306,40 @@ export default function BankDeposit() {
               required
             />
           </div>
-          
+
+          <div>
+            <label className="block text-sm font-medium text-pan-sinai-dark-brown mb-2">
+              Foto del comprobante (opcional)
+            </label>
+            <div className="flex items-start space-x-4">
+              <label className="cursor-pointer inline-flex items-center px-4 py-2 bg-white border border-gray-300 rounded-lg shadow-sm text-sm font-medium text-pan-sinai-dark-brown hover:bg-gray-50">
+                <Upload className="w-4 h-4 mr-2" />
+                <span>Subir imagen</span>
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    const reader = new FileReader();
+                    reader.onload = () => {
+                      setReceiptImage(reader.result as string);
+                    };
+                    reader.readAsDataURL(file);
+                  }}
+                />
+              </label>
+
+              {receiptImage && (
+                <div className="flex-1">
+                  <div className="text-xs text-pan-sinai-brown mb-2">Vista previa:</div>
+                  <img src={receiptImage} alt="Comprobante" className="max-h-40 rounded-lg border border-gray-200" />
+                </div>
+              )}
+            </div>
+          </div>
+
           <div>
             <label className="block text-sm font-medium text-pan-sinai-dark-brown mb-2">
               Justificación (Opcional)
@@ -317,7 +360,7 @@ export default function BankDeposit() {
                 <span className="text-sm font-medium text-pan-sinai-dark-brown">Validación</span>
                 {getDifferenceIcon()}
               </div>
-              
+
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
                 <div>
                   <span className="text-pan-sinai-brown">Esperado:</span>
@@ -334,7 +377,7 @@ export default function BankDeposit() {
                   </span>
                 </div>
               </div>
-              
+
               {Math.abs(difference) > 10 && (
                 <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg">
                   <p className="text-sm text-red-800">
@@ -368,7 +411,7 @@ export default function BankDeposit() {
                 ¿Estás seguro de que deseas registrar este depósito?
               </p>
             </div>
-            
+
             <div className="space-y-4">
               <div className="bg-gray-50 rounded-lg p-4">
                 <div className="space-y-2 text-sm">
@@ -390,9 +433,15 @@ export default function BankDeposit() {
                       <span className={`font-semibold ${getDifferenceColor()}`}>${difference.toFixed(2)}</span>
                     </div>
                   )}
+                  {receiptImage && (
+                    <div className="pt-3">
+                      <div className="text-pan-sinai-brown mb-2">Comprobante:</div>
+                      <img src={receiptImage} alt="Comprobante" className="max-h-48 rounded-lg border border-gray-200" />
+                    </div>
+                  )}
                 </div>
               </div>
-              
+
               <div className="flex space-x-3">
                 <button
                   onClick={() => setShowConfirmation(false)}
@@ -424,4 +473,4 @@ export default function BankDeposit() {
       )}
     </div>
   );
-} 
+}

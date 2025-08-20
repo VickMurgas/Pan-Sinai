@@ -3,12 +3,12 @@
 import React, { useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useCustomers } from '@/contexts/CustomerContext';
-import { 
-  ShoppingCart, 
-  Users, 
-  DollarSign, 
-  Package, 
-  MapPin, 
+import {
+  ShoppingCart,
+  Users,
+  DollarSign,
+  Package,
+  MapPin,
   Plus,
   LogOut,
   User,
@@ -38,13 +38,14 @@ import Logo from '@/components/ui/Logo';
 import GestionDevoluciones from '@/components/sales/GestionDevoluciones';
 import ProductoRapido from '@/components/sales/ProductoRapido';
 import VentaRapidaIntegrada from '@/components/sales/VentaRapidaIntegrada';
+import PendingPayments from '@/components/payments/PendingPayments';
 
 export default function VendedorDashboard() {
   const { user, logout } = useAuth();
   const { getCurrentRoute } = useCustomers();
   const [routeStatus, setRouteStatus] = useState<'available' | 'en-ruta' | 'finalizando'>('available');
   const [showStock, setShowStock] = useState(false);
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'customers' | 'routes' | 'qr' | 'history' | 'reports' | 'closure' | 'deposit' | 'reconciliation' | 'settings' | 'ultra-fast' | 'qr-generator' | 'devoluciones' | 'producto-rapido' | 'venta-rapida-integrada'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'customers' | 'routes' | 'qr' | 'history' | 'reports' | 'closure' | 'deposit' | 'reconciliation' | 'settings' | 'ultra-fast' | 'qr-generator' | 'devoluciones' | 'producto-rapido' | 'venta-rapida-integrada' | 'pagos-pendientes'>('dashboard');
   const [showQRScanner, setShowQRScanner] = useState(false);
 
   // Datos de prueba para el vendedor
@@ -208,6 +209,16 @@ export default function VendedorDashboard() {
               }`}
             >
               Generador QR
+            </button>
+            <button
+              onClick={() => setActiveTab('pagos-pendientes')}
+              className={`flex-1 py-3 px-4 rounded-lg font-medium transition-colors ${
+                activeTab === 'pagos-pendientes'
+                  ? 'bg-pan-sinai-gold text-pan-sinai-dark-brown'
+                  : 'text-pan-sinai-brown hover:text-pan-sinai-dark-brown'
+              }`}
+            >
+              Pagos Pendientes
             </button>
               </div>
             </div>
@@ -452,9 +463,13 @@ export default function VendedorDashboard() {
           <VentaRapidaIntegrada />
         )}
 
+        {activeTab === 'pagos-pendientes' && (
+          <PendingPayments />
+        )}
+
         {/* Scanner QR */}
         {showQRScanner && (
-          <QRScanner 
+          <QRScanner
             onCustomerSelect={(customer) => {
               console.log('Cliente seleccionado:', customer);
               setShowQRScanner(false);
@@ -469,4 +484,4 @@ export default function VendedorDashboard() {
       <SessionWarning />
     </div>
   );
-} 
+}

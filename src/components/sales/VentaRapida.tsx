@@ -17,7 +17,8 @@ export default function VentaRapida() {
     processSale,
     searchProducts,
     getProductSuggestions,
-    validateStock
+    validateStock,
+    setHasReturns
   } = useSales();
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -31,12 +32,19 @@ export default function VentaRapida() {
 
   const searchInputRef = useRef<HTMLInputElement>(null);
 
+  // Venta Rápida no maneja devoluciones
+
   // Auto-focus en el campo de búsqueda
   useEffect(() => {
     if (searchInputRef.current) {
       searchInputRef.current.focus();
     }
   }, []);
+
+  // Forzar que Venta Rápida no maneje devoluciones
+  useEffect(() => {
+    setHasReturns(false);
+  }, [setHasReturns]);
 
   // Búsqueda en tiempo real
   useEffect(() => {
@@ -50,13 +58,15 @@ export default function VentaRapida() {
     }
   }, [searchQuery, searchProducts]);
 
+  // Venta Rápida no maneja devoluciones
+
   // Manejar selección de producto
   const handleProductSelect = (product: Product) => {
     setSelectedProduct(product);
     setQuantity(1);
     setSearchQuery('');
     setSearchResults([]);
-    
+
     // Validar stock antes de agregar
     const validation = validateStock(product.id, 1);
     if (!validation.valid) {
@@ -65,7 +75,7 @@ export default function VentaRapida() {
       setShowSuggestions(true);
       return;
     }
-    
+
     addToCart(product, 1);
     setMessage({ type: 'success', text: `${product.name} agregado al carrito` });
     setTimeout(() => setMessage(null), 2000);
@@ -80,7 +90,7 @@ export default function VentaRapida() {
   // Agregar producto con cantidad específica
   const handleAddWithQuantity = () => {
     if (!selectedProduct) return;
-    
+
     const validation = validateStock(selectedProduct.id, quantity);
     if (!validation.valid) {
       setMessage({ type: 'error', text: validation.message! });
@@ -88,7 +98,7 @@ export default function VentaRapida() {
       setShowSuggestions(true);
       return;
     }
-    
+
     addToCart(selectedProduct, quantity);
     setMessage({ type: 'success', text: `${quantity}x ${selectedProduct.name} agregado` });
     setSelectedProduct(null);
@@ -119,6 +129,8 @@ export default function VentaRapida() {
       setTimeout(() => setMessage(null), 3000);
     }
   };
+
+  // Venta Rápida no maneja devoluciones
 
   // Limpiar mensajes
   const clearMessage = () => setMessage(null);
@@ -257,8 +269,8 @@ export default function VentaRapida() {
           {/* Mensajes del sistema */}
           {message && (
             <div className={`p-4 rounded-lg flex items-center space-x-2 ${
-              message.type === 'success' 
-                ? 'bg-green-50 border border-green-200 text-green-800' 
+              message.type === 'success'
+                ? 'bg-green-50 border border-green-200 text-green-800'
                 : 'bg-red-50 border border-red-200 text-red-800'
             }`}>
               {message.type === 'success' ? (
@@ -346,6 +358,7 @@ export default function VentaRapida() {
                   <span>Subtotal:</span>
                   <span>${state.cart.subtotal.toFixed(2)}</span>
                 </div>
+
                 <div className="flex justify-between text-sm">
                   <span>Descuento:</span>
                   <span>-${state.cart.descuento.toFixed(2)}</span>
@@ -358,6 +371,8 @@ export default function VentaRapida() {
             )}
           </div>
 
+
+
           {/* Métodos de Pago */}
           {state.cart.items.length > 0 && (
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
@@ -366,7 +381,7 @@ export default function VentaRapida() {
                 {state.metodosPago.map((metodo) => (
                   <button
                     key={metodo.tipo}
-                    onClick={() => setPaymentMethod(metodo.tipo)}
+                    onClick={() => setPaymentMethod(metodo.tipo as any)}
                     className={`w-full flex items-center space-x-3 p-3 rounded-lg border transition-colors ${
                       state.cart.metodoPago === metodo.tipo
                         ? 'border-blue-500 bg-blue-50 text-blue-700'
@@ -412,4 +427,4 @@ export default function VentaRapida() {
       </div>
     </div>
   );
-} 
+}
